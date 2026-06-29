@@ -1,17 +1,73 @@
-# qa-mcp distribution
+# qa-mcp — нативный QA для 1C через TestClient (для AI-агентов)
 
-Public delivery channel for **qa-mcp** (native 1C TestClient QA — Windows model‑B, thin cross‑machine).
+`qa-mcp` — инструмент QA-автоматизации приложений **1C:Предприятие**, отдаваемый по **MCP**, чтобы AI-агент мог
+драйвить и проверять управляемые формы 1C и гонять BDD/Gherkin-сценарии — **нативно по протоколу 1C TestClient**,
+без сторонних UI-automation-движков в контуре. Это нативный СУПЕРСЕТ за пределами Vanessa.
 
-## What ships here
-Each tagged release attaches the Windows host‑side assets the deploy needs:
-- `qa-mcp-host-agent.exe` (+ `.sha256`) — the host display/input agent
-- `install-windows-host-agent.ps1`, `bootstrap.ps1`, `windows-agent-runbook.md`, `README.md`
+Этот репозиторий — **публичный канал поставки**: к каждому релизу приложены Windows-ассеты (host-agent,
+bootstrap, runbook); образ контейнера публикуется в **GHCR**.
 
-## Run it
-The protected MCP image is published to **GHCR**:
+## Что умеет
 
+- Драйвить и читать управляемые формы по протоколу — открыть, заполнить, кликнуть, выбрать из списка,
+  переключить флаг, проверить состояние формы/элемента.
+- Писать и гонять **BDD/Gherkin**-сценарии; отчёты **JUnit / Allure**.
+- **Проверки на уровне данных** (UI → БД через стандартный OData), проверки доступа по ролям, генерация тестов
+  по метаданным.
+- **Покрытие кода + перформанс/APDEX** через debug-протокол 1C.
+- Скриншоты, поиск элементов на экране, ввод ОС для визуальных кейсов.
+- ~62 MCP-инструмента, отдаются по HTTP.
+
+## Поддерживаемые версии платформы 1C
+
+Ровно **две**: **`8.3.27.2130`** и **`8.5.1.1343`** (проверены и забандлены в образ). Сборки тех же семейств
+(`8.3.27.x` / `8.5.1.x`) обычно работают — протокол внутри семейства совместим; другие семейства
+(`8.3.24`, `8.3.26`, …) **не поддерживаются**.
+
+## Как устроена поставка (Windows, модель B)
+
+Тонкий Linux-контейнер запускает MCP-сервер qa-mcp и драйвит 1C **TestClient на вашем Windows-хосте** —
+на **вашей лицензионной 1C:Предприятие**. Маленький host-agent возвращает инструменты ввода/скриншотов,
+которым нужен рабочий стол хоста. Образу не нужны ни платформа 1C, ни X11, ни лицензия 1C — всё это остаётся
+на вашем хосте.
+
+- **Образ:** `ghcr.io/vlikhobabin/qa-mcp-thin:latest` (GHCR, публичный `docker pull` без авторизации).
+- **Ассеты релиза** (этот репозиторий, вкладка *Releases*):
+  `qa-mcp-host-agent.exe` (+ `.sha256`), `bootstrap.ps1`, `install-windows-host-agent.ps1`,
+  `windows-agent-runbook.md`.
+
+## Быстрый старт (одна команда)
+
+На Windows-хосте с **установленным и запущенным Docker Desktop** (бэкенд WSL2):
+
+```powershell
+Invoke-WebRequest "https://github.com/vlikhobabin/qa-mcp-dist/releases/latest/download/bootstrap.ps1" -OutFile "$env:TEMP\qa-bootstrap.ps1"
+powershell -ExecutionPolicy Bypass -File "$env:TEMP\qa-bootstrap.ps1" `
+  -Infobase "<путь к файловой базе ИЛИ строка соединения>" -User "Администратор"
 ```
-docker pull ghcr.io/vlikhobabin/qa-mcp-thin:latest
-```
 
-Then follow `windows-agent-runbook.md` (or `bootstrap.ps1`) from the latest Release.
+`bootstrap.ps1` сам проверит Docker, найдёт `1cv8.exe`, установит host-agent, поднимет TestClient,
+скачает и запустит контейнер и свяжет всё токеном. Затем подключите вашего AI-агента к
+`http://127.0.0.1:8000/mcp/` (используйте `127.0.0.1`, **не** `localhost`).
+
+> ⚠️ **Docker может быть не установлен** — это первое, что нужно проверить. `bootstrap.ps1` проверяет Docker
+> в самом начале и останавливается с понятным сообщением, если его нет. Установка Docker Desktop требует прав
+> **администратора** и, возможно, **перезагрузки** — поставить его «молча» нельзя.
+
+## Подробный runbook (для AI-агента)
+
+Полный пошаговый сценарий развёртывания для AI-агента — `windows-agent-runbook.md` (ассет релиза):
+прероквизиты (Docker → сессия → версия платформы) → запрос доступа к конфигурации → host-agent → TestClient →
+контейнер → **e2e на вашей конфигурации** → подключение к агенту. Ручной путь там же — ровно то, что
+автоматизирует `bootstrap.ps1`.
+
+## Лицензия и доступ
+
+qa-mcp работает поверх **вашей** установленной лицензионной 1C:Предприятие — отдельная лицензия 1C для
+контейнера не требуется. Образ в GHCR публичный; продуктовый лицензионный гейт по умолчанию выключен.
+
+## Поддержка версий и обновления
+
+- Новый образ — `docker pull ghcr.io/vlikhobabin/qa-mcp-thin:latest` и пересоздать контейнер.
+- Новый host-agent — пере-скачать и перезапустить инсталлятор. Рукопожатие версий контейнер↔агент —
+  detect-and-instruct: при несовпадении версии/хеша qa-mcp вернёт точную команду переустановки.
